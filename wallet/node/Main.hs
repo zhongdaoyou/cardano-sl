@@ -35,7 +35,7 @@ import           Pos.Util.CompileInfo (HasCompileInfo, retrieveCompileTimeInfo, 
 import           Pos.Util.UserSecret (usVss)
 import           Pos.Wallet.Web (WalletWebMode, bracketWalletWS, bracketWalletWebDB, getSKById,
                                  runWRealMode, syncWalletsWithGState, walletServeWebFull,
-                                 walletServerOuts)
+                                 walletServerOuts, AddrCIdHashes (..))
 import           Pos.Wallet.Web.State (cleanupAcidStatePeriodically, flushWalletStorage,
                                        getWalletAddresses)
 import           Pos.Web (serveWeb)
@@ -64,10 +64,12 @@ actionWithWallet sscParams nodeParams wArgs@WalletArgs {..} =
         bracketWalletWS $ \conn ->
             bracketNodeResources nodeParams sscParams
                 txpGlobalSettings
-                initNodeDBs $ \nr@NodeResources {..} ->
+                initNodeDBs $ \nr@NodeResources {..} -> do
+                ref <- newIORef mempty
                 runWRealMode
                     db
                     conn
+                    (AddrCIdHashes ref)
                     nr
                     (mainAction nr)
   where
