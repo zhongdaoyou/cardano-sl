@@ -58,6 +58,7 @@ import           Pos.Delegation.Types         (DlgPayload (getDlgPayload), DlgUn
 import qualified Pos.GState                   as GS
 import           Pos.Lrc.Context              (LrcContext)
 import qualified Pos.Lrc.DB                   as LrcDB
+import           Pos.Lrc.Types                (RichmenSet)
 import           Pos.Ssc.Class.Helpers        (SscHelpersClass)
 import           Pos.Util                     (HasLens', getKeys, _neHead)
 import           Pos.Util.Chrono              (NE, NewestFirst (..), OldestFirst (..))
@@ -296,6 +297,7 @@ calculateTransCorrections eActions = do
 -- This function returns identitifers of stakeholders who are no
 -- longer rich in the given epoch, but were rich in the previous one.
 getNoLongerRichmen ::
+       forall m ctx.
        ( Monad m
        , MonadIO m
        , MonadDBRead m
@@ -303,14 +305,13 @@ getNoLongerRichmen ::
        , HasLens' ctx LrcContext
        )
     => EpochIndex
-    -> m [StakeholderId]
+    -> m (HashSet StakeholderId)
 getNoLongerRichmen (EpochIndex 0) = pure mempty
 getNoLongerRichmen newEpoch =
-    (\\) <$> getRichmen (newEpoch - 1) <*> getRichmen newEpoch
+    HS.difference <$> getRichmen (newEpoch - 1) <*> getRichmen newEpoch
   where
-    getRichmen e =
-        toList <$>
-        lrcActionOnEpochReason e "getNoLongerRichmen" LrcDB.getRichmenDlg
+    getRichmen :: EpochIndex -> m RichmenSet
+    getRichmen e = lrcActionOnEpochReason e "getNoLongerRichmen" LrcDB.getRichmenDlg
 
 -- State needed for 'delegationVerifyBlocks'.
 data DlgVerState = DlgVerState
@@ -363,7 +364,7 @@ dlgVerifyBlocks blocks = do
         dvCurEpoch .= HS.empty
         let blkEpoch = genesisBlk ^. epochIndexL
         noLongerRichmen <- lift $ lift $ getNoLongerRichmen blkEpoch
-        deletedPSKs <- catMaybes <$> mapM getPsk noLongerRichmen
+        deletedPSKs <- catMaybes <$> mapM getPsk (toList noLongerRichmen)
         -- We should delete all certs for people who are not richmen.
         let delFromCede = modPsk . DlgEdgeDel . addressHash . pskIssuerPk
         mapM_ delFromCede deletedPSKs
@@ -378,13 +379,12 @@ dlgVerifyBlocks blocks = do
         let h = blk ^. gbHeader
         let issuer = h ^. mainHeaderLeaderKey
         let sig = h ^. gbhConsensus ^. mcdSignature
-        issuerPsk <- getPskPk issuer
-        whenJust issuerPsk $ \psk -> case sig of
+        whenJustM (getPskPk issuer) $ \iPsk -> case sig of
             (BlockSignature _) ->
                 throwError $
                 sformat ("issuer "%build%" has delegated issuance right, "%
                          "so he can't issue the block, psk: "%build%", sig: "%build)
-                    issuer psk sig
+                    issuer iPsk sig
             _ -> pass
 
         -- Check 2: Check that if proxy sig is used, delegate indeed
@@ -418,60 +418,61 @@ dlgVerifyBlocks blocks = do
             allIssuersSt = map addressHash allIssuers
             (revokeIssuers, changeIssuers) =
                 bimap toIssuers toIssuers $ partition isRevokePsk proxySKs
+        toRollback <- if null proxySKs then pure mempty else do
+            -- Check 3: Issuers have enough money (though it's free to revoke).
+            when (any (not . (`HS.member` richmen) . addressHash) changeIssuers) $
+                throwError $ sformat ("Block "%build%" contains psk issuers that "%
+                                      "don't have enough stake")
+                                     (headerHash blk)
 
-        -- Check 3: Issuers have enough money (though it's free to revoke).
-        when (any (not . (`HS.member` richmen) . addressHash) changeIssuers) $
-            throwError $ sformat ("Block "%build%" contains psk issuers that "%
-                                  "don't have enough stake")
-                                 (headerHash blk)
+            -- Check 4: No issuer has posted psk this epoch before.
+            curEpoch <- use dvCurEpoch
+            when (any (`HS.member` curEpoch) allIssuersSt) $
+                throwError $ sformat ("Block "%build%" contains issuers that "%
+                                      "have already published psk this epoch")
+                                     (headerHash blk)
 
-        -- Check 4: No issuer has posted psk this epoch before.
-        curEpoch <- use dvCurEpoch
-        when (any (`HS.member` curEpoch) allIssuersSt) $
-            throwError $ sformat ("Block "%build%" contains issuers that "%
-                                  "have already published psk this epoch")
-                                 (headerHash blk)
+            -- Check 5: Every revoking psk indeed revokes previous
+            -- non-revoking psk.
+            revokePrevCerts <- mapM (\x -> (x,) <$> getPskPk x) revokeIssuers
+            let dontHavePrevPsk = filter (isNothing . snd) revokePrevCerts
+            unless (null dontHavePrevPsk) $
+                throwError $
+                sformat ("Block "%build%" contains revoke certs that "%
+                         "don't revoke anything: "%listJson)
+                         (headerHash blk) (map fst dontHavePrevPsk)
 
-        -- Check 5: Every revoking psk indeed revokes previous
-        -- non-revoking psk.
-        revokePrevCerts <- mapM (\x -> (x,) <$> getPskPk x) revokeIssuers
-        let dontHavePrevPsk = filter (isNothing . snd) revokePrevCerts
-        unless (null dontHavePrevPsk) $
-            throwError $
-            sformat ("Block "%build%" contains revoke certs that "%
-                     "don't revoke anything: "%listJson)
-                     (headerHash blk) (map fst dontHavePrevPsk)
+            -- Check 6: applying psks won't create a cycle.
+            --
+            -- Lemma 1: Removing edges from acyclic graph doesn't create cycles.
+            --
+            -- Lemma 2: Let G = (E₁,V₁) be acyclic graph and F = (E₂,V₂) another one,
+            -- where E₁ ∩ E₂ ≠ ∅ in general case. Then if G ∪ F has a loop C, then
+            -- ∃ a ∈ C such that a ∈ E₂.
+            --
+            -- Hence in order to check whether S=G∪F has cycle, it's sufficient to
+            -- validate that dfs won't re-visit any vertex, starting it on
+            -- every s ∈ E₂.
+            --
+            -- In order to do it we should resolve with db, 'dvPskChanged' and
+            -- 'proxySKs' together. So it's alright to first apply 'proxySKs'
+            -- to 'dvPskChanged' and then perform the check.
 
-        -- Check 6: applying psks won't create a cycle.
-        --
-        -- Lemma 1: Removing edges from acyclic graph doesn't create cycles.
-        --
-        -- Lemma 2: Let G = (E₁,V₁) be acyclic graph and F = (E₂,V₂) another one,
-        -- where E₁ ∩ E₂ ≠ ∅ in general case. Then if G ∪ F has a loop C, then
-        -- ∃ a ∈ C such that a ∈ E₂.
-        --
-        -- Hence in order to check whether S=G∪F has cycle, it's sufficient to
-        -- validate that dfs won't re-visit any vertex, starting it on
-        -- every s ∈ E₂.
-        --
-        -- In order to do it we should resolve with db, 'dvPskChanged' and
-        -- 'proxySKs' together. So it's alright to first apply 'proxySKs'
-        -- to 'dvPskChanged' and then perform the check.
+            -- Collect rollback info, apply new psks
+            changePrevCerts <- mapM getPskPk changeIssuers
+            let toRollback = catMaybes $ map snd revokePrevCerts <> changePrevCerts
+            mapM_ (modPsk . pskToDlgEdgeAction) proxySKs
 
-        -- Collect rollback info, apply new psks
-        changePrevCerts <- mapM getPskPk changeIssuers
-        let toRollback = catMaybes $ map snd revokePrevCerts <> changePrevCerts
-        mapM_ (modPsk . pskToDlgEdgeAction) proxySKs
+            -- Perform the check
+            cyclePoints <- catMaybes <$> mapM detectCycleOnAddition proxySKs
+            unless (null cyclePoints) $
+                throwError $
+                sformat ("Block "%build%" leads to psk cycles, at least in these certs: "%listJson)
+                        (headerHash blk)
+                        (take 5 $ cyclePoints) -- should be enough
 
-        -- Perform the check
-        cyclePoints <- catMaybes <$> mapM detectCycleOnAddition proxySKs
-        unless (null cyclePoints) $
-            throwError $
-            sformat ("Block "%build%" leads to psk cycles, at least in these certs: "%listJson)
-                    (headerHash blk)
-                    (take 5 $ cyclePoints) -- should be enough
-
-        dvCurEpoch %= HS.union (HS.fromList allIssuersSt)
+            dvCurEpoch %= HS.union (HS.fromList allIssuersSt)
+            pure toRollback
         pure $ DlgUndo toRollback mempty
 
 -- | Applies a sequence of definitely valid blocks to memory state and
