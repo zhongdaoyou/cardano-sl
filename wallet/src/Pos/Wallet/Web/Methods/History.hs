@@ -32,7 +32,7 @@ import           Pos.Wallet.WalletMode      (getLocalHistory, localChainDifficul
                                              networkChainDifficulty)
 import           Pos.Wallet.Web.ClientTypes (AccountId (..), Addr, CId, CTx (..), CTxId,
                                              CTxMeta (..), CWAddressMeta (..),
-                                             ScrollLimit, ScrollOffset, Wal, mkCTx)
+                                             ScrollLimit, ScrollOffset, Wal, SinceTime, mkCTx)
 import           Pos.Wallet.Web.Error       (WalletError (..))
 import           Pos.Wallet.Web.Mode        (MonadWalletWebMode, convertCIdToAddrs, convertCIdToAddr)
 import           Pos.Wallet.Web.Pending     (PendingTx (..), ptxPoolInfo, _PtxApplying)
@@ -123,10 +123,11 @@ getHistoryLimited
     => Maybe (CId Wal)
     -> Maybe AccountId
     -> Maybe (CId Addr)
+    -> Maybe SinceTime
     -> Maybe ScrollOffset
     -> Maybe ScrollLimit
     -> m ([CTx], Word)
-getHistoryLimited mCWalId mAccId mAddrId mSkip mLimit = do
+getHistoryLimited mCWalId mAccId mAddrId mSince mSkip mLimit = do
     logDebug "getHistoryLimited: started"
     (cWalId, accIds) <- case (mCWalId, mAccId) of
         (Nothing, Nothing)      -> throwM errorSpecifySomething
@@ -142,8 +143,10 @@ getHistoryLimited mCWalId mAccId mAddrId mSkip mLimit = do
     let getTxTimestamp entry@THEntry{..} =
             (entry,) . maybe curTime ctmDate <$> getTxMeta cWalId (encodeCType _thTxId)
     txsWithTime <- mapM getTxTimestamp (Map.elems unsortedThs)
+    let since = timestampToPosix $ maybe 0 fromIntegral mSince
+    let sinceTxsWithTime = filter ((> since) . snd) txsWithTime
 
-    let !sortedTxh = forceList $ sortByTime txsWithTime
+    let !sortedTxh = forceList $ sortByTime sinceTxsWithTime
     logDebug "getHistoryLimited: sorted transactions"
 
     let respEntries = applySkipLimit sortedTxh
