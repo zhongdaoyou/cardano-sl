@@ -240,7 +240,7 @@ sendMoney SendActions{..} passphrase moneySource dstDistr policy = do
     srcWalletAddrsDetector <- getWalletAddrsDetector Ever srcWallet
 
     logDebug "sendMoney: constructing response"
-    fst <$> constructCTx srcWallet srcWalletAddrsDetector diff th
+    constructCTx srcWallet srcWalletAddrsDetector diff th
   where
      -- TODO eliminate copy-paste
      listF separator formatter =

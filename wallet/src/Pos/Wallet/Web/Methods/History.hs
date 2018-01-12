@@ -85,7 +85,7 @@ getFilteredHistory
     -> m (Map TxId TxHistoryEntry, Word)
 getFilteredHistory cWalId accIds mCAddrId = do
     -- FIXME: searching when only AddrId is provided is not supported yet.
-    accCAddrs  <- map (cwamId . adiCWAddressMeta) <$> concatMapM (getAccountAddrsOrThrow Ever) accIds
+    accCAddrs <- map (cwamId . adiCWAddressMeta) <$> concatMapM (getAccountAddrsOrThrow Ever) accIds
     allAccIds <- getWalletAccountIds cWalId
 
     let !filterFn = case mCAddrId of
@@ -103,7 +103,7 @@ getFilteredHistory cWalId accIds mCAddrId = do
                  pure $ filterByAddrs (S.singleton addr) history
             | otherwise                -> throw errorBadAddress
     res <- (\(x, y) -> (,y) <$> filterFn x) =<< getFullWalletHistory cWalId
-    res <$ logDebug "getHistory: filtered transactions"
+    res <$ logDebug "getFilteredHistory: filtered transactions"
   where
     filterByAddrs
         :: S.Set Address
@@ -138,22 +138,29 @@ getHistoryLimited mCWalId mAccId mAddrId mSkip mLimit = do
     (unsortedThs, n) <- getFilteredHistory cWalId accIds mAddrId
     logDebug "getHistoryLimited: invokated getFilteredHistory"
 
-    walAddrsDetector <- getWalletAddrsDetector Ever cWalId
-    diff <- getCurChainDifficulty
-    !cHistory <- forM unsortedThs (constructCTx cWalId walAddrsDetector diff)
-    logDebug "getHistoryLimited: formed cTxs"
+    curTime <- liftIO getPOSIXTime
+    let getTxTimestamp entry@THEntry{..} =
+            (entry,) . maybe curTime ctmDate <$> getTxMeta cWalId (encodeCType _thTxId)
+    txsWithTime <- mapM getTxTimestamp (Map.elems unsortedThs)
 
-    let !sortedTxh = forceList $ sortByTime (Map.elems cHistory)
+    let !sortedTxh = forceList $ sortByTime txsWithTime
     logDebug "getHistoryLimited: sorted transactions"
 
-    logCTxs "Total last 20" $ take 20 sortedTxh
-    pure (applySkipLimit sortedTxh, n)
+    let respEntries = applySkipLimit sortedTxh
+    walAddrsDetector <- getWalletAddrsDetector Ever cWalId
+    diff <- getCurChainDifficulty
+    !cHistory <- forM respEntries (constructCTxWithTime cWalId walAddrsDetector diff)
+    logDebug "getHistoryLimited: formed cTxs"
+
+    let takeN = min 20 (length cHistory)
+    logCTxs (sformat ("Total last "%build) takeN) (take takeN cHistory)
+    pure (cHistory, n)
   where
-    sortByTime :: [(CTx, POSIXTime)] -> [CTx]
+    sortByTime :: [(TxHistoryEntry, POSIXTime)] -> [(TxHistoryEntry, POSIXTime)]
     sortByTime thsWTime =
         -- TODO: if we use a (lazy) heap sort here, we can get the
         -- first n values of the m sorted elements in O(m + n log m)
-        map fst $ sortWith (Down . snd) thsWTime
+        sortWith (Down . snd) thsWTime
     forceList l = length l `seq` l
     applySkipLimit = take limit . drop skip
     limit = (fromIntegral $ fromMaybe defaultLimit mLimit)
@@ -193,13 +200,23 @@ constructCTx
     -> (CId Addr -> Bool)
     -> ChainDifficulty
     -> TxHistoryEntry
-    -> m (CTx, POSIXTime)
-constructCTx cWalId addrBelongsToWallet diff wtx@THEntry{..} = do
+    -> m CTx
+constructCTx cWalId addrBelongsToWallet diff entry@THEntry{..}= do
     let cId = encodeCType _thTxId
-    meta <- maybe (CTxMeta <$> liftIO getPOSIXTime) -- It's impossible case but just in case
-            pure =<< getTxMeta cWalId cId
+    posixTime <- maybe (liftIO getPOSIXTime) (pure . ctmDate) =<< getTxMeta cWalId cId
+    constructCTxWithTime cWalId addrBelongsToWallet diff (entry, posixTime)
+
+constructCTxWithTime
+    :: MonadWalletWebMode m
+    => CId Wal
+    -> (CId Addr -> Bool)
+    -> ChainDifficulty
+    -> (TxHistoryEntry, POSIXTime)
+    -> m CTx
+constructCTxWithTime cWalId addrBelongsToWallet diff (wtx@THEntry{..}, posixTime) = do
+    let meta = CTxMeta posixTime
     ptxCond <- encodeCType . fmap _ptxCond <$> getPendingTx cWalId _thTxId
-    either (throwM . InternalError) (pure . (, ctmDate meta)) $
+    either (throwM . InternalError) pure $
         mkCTx diff wtx meta ptxCond addrBelongsToWallet
 
 getCurChainDifficulty :: MonadWalletWebMode m => m ChainDifficulty
