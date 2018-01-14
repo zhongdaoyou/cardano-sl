@@ -91,9 +91,8 @@ confirmBlockVersion confirmedEpoch bv =
 -- • '(major, minor)' of given block version is greater than
 -- '(major, minor)' of adopted block version and this block version
 -- is confirmed.
-canCreateBlockBV :: MonadPollRead m => BlockVersion -> m Bool
-canCreateBlockBV bv = do
-    lastAdopted <- getAdoptedBV
+canCreateBlockBV :: MonadPollRead m => BlockVersion -> BlockVersion -> m Bool
+canCreateBlockBV lastAdopted bv = do
     isConfirmed <- isConfirmedBV bv
     let toMajMin BlockVersion {..} = (bvMajor, bvMinor)
     return

@@ -75,7 +75,9 @@ verifyBlocksPrefix blocks = runExceptT $ do
     adoptedBV <- GS.getAdoptedBV
     let dataMustBeKnown = mustDataBeKnown adoptedBV
     -- And then we run verification of each component.
-    slogUndos <- tempMeasure "verifyBlocksPrefix.slog" $ withExceptT VerifyBlocksError $ slogVerifyBlocks blocks
+    slogUndos <-
+        tempMeasure "verifyBlocksPrefix.slog" $
+        withExceptT VerifyBlocksError $ slogVerifyBlocks blocks
     _ <-
         tempMeasure "verifyBlocksPrefix.ssc" $
         withExceptT (VerifyBlocksError . pretty) $

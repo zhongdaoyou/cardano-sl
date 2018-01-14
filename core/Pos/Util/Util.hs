@@ -645,6 +645,6 @@ tempMeasure label action = do
     !x <- action
     after <- liftIO getCurrentTime
     let d :: Integer
-        d = round $ 1000000 * toRational (after `diffUTCTime` before)
+        d = round $ 1000 * toRational (after `diffUTCTime` before)
     putText $ "tempMeasure " <> label <> ": " <> show d
     pure x
