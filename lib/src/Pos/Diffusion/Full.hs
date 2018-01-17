@@ -13,7 +13,7 @@ import           Universum
 import           Control.Monad.Fix (MonadFix)
 import qualified Data.Map as M
 import           Data.Reflection (Given, give, given)
-import           Data.Time.Units (Millisecond)
+import           Data.Time.Units (Millisecond, toMicroseconds)
 import           Formatting (sformat, shown, (%))
 import           Mockable (withAsync)
 import           Mockable.Production (Production)
@@ -65,9 +65,11 @@ import           Pos.Network.CLI (NetworkConfigOpts (..), intNetworkConfigOpts)
 import           Pos.Network.Types (Bucket, NetworkConfig (..), SubscriptionWorker (..),
                                     Topology (..), initQueue, topologySubscribers,
                                     topologySubscriptionWorker)
+import           Pos.Slotting (MonadSlotsData)
 import           Pos.Ssc.Message (MCCommitment, MCOpening, MCShares, MCVssCertificate)
 import           Pos.Update.Configuration (lastKnownBlockVersion)
 import           Pos.Util.OutboundQueue (EnqueuedConversation (..))
+import           Pos.Util.Timer (newTimer)
 
 {-# ANN module ("HLint: ignore Reduce duplication" :: Text) #-}
 
@@ -83,8 +85,9 @@ instance (Given (m BlockVersionData)) => HasAdoptedBlockVersionData m where
 -- That's to say, we'd have to do the same work anyway, but then even more
 -- work to juggle the instances.
 diffusionLayerFull
-    :: forall d x .
+    :: forall d ctx x .
        ( DiffusionWorkMode d
+       , MonadSlotsData ctx d
        , MonadFix d
        )
     => NetworkConfigOpts
@@ -289,8 +292,8 @@ diffusionLayerFull networkConfigOpts mEkgStore expectLogic =
 -- | Create kademlia, network-transport, and run the outbound queue's
 -- dequeue thread.
 runDiffusionLayerFull
-    :: forall d x .
-       ( DiffusionWorkMode d, MonadFix d )
+    :: forall d ctx x .
+       ( DiffusionWorkMode d, MonadSlotsData ctx d, MonadFix d )
     => NetworkConfig KademliaParams
     -> VerInfo
     -> OQ.OutboundQ (EnqueuedConversation d) NodeId Bucket
@@ -322,7 +325,8 @@ runDiffusionLayerFull networkConfig ourVerInfo oq slotDuration listeners action 
         return ((>>= either throwM return) <$> itMap)
     subscriptionThread nc sactions = case topologySubscriptionWorker (ncTopology nc) of
         Just (SubscriptionWorkerBehindNAT dnsDomains) -> do
-            dnsSubscriptionWorker oq networkConfig dnsDomains slotDuration sactions
+            timer <- newTimer . fromIntegral . toMicroseconds =<< slotDuration
+            dnsSubscriptionWorker networkConfig dnsDomains timer sactions
         Just (SubscriptionWorkerKademlia kinst nodeType valency fallbacks) ->
             dhtSubscriptionWorker oq kinst nodeType valency fallbacks sactions
         Nothing -> pure ()

@@ -93,8 +93,6 @@ library
                         Pos.Shutdown.Types
 
                         -- Subscription
-                        Pos.Subscription.Common
-                        Pos.Subscription.Dns
                         Pos.Subscription.Dht
 
                         -- NTP
