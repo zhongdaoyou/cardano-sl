@@ -27,7 +27,6 @@ import           Pos.Communication.Protocol (Conversation (..), ConversationActi
                                              MsgSubscribe1 (..), NodeId, OutSpecs, SendActions,
                                              Worker, WorkerSpec, constantListeners, convH,
                                              toOutSpecs, withConnectionTo, worker)
-import           Pos.KnownPeers (MonadKnownPeers (..))
 import           Pos.Network.Types (Bucket (..), NodeType)
 import           Pos.Util.DynamicTimer (DynamicTimer, startDynamicTimer, waitDynamicTimer)
 
@@ -35,7 +34,6 @@ type SubscriptionMode m =
     ( MonadIO m
     , WithLogger m
     , MonadMask m
-    , MonadKnownPeers m
     , Message MsgSubscribe
     , Message MsgSubscribe1
     , MessageLimited MsgSubscribe m
@@ -104,9 +102,9 @@ subscriptionListener oq nodeType = listenerConv @Void oq $ \_ nodeId conv -> do
         Just MsgSubscribe -> do
             let peers = simplePeers [(nodeType, nodeId)]
             bracket
-                (updatePeersBucket BucketSubscriptionListener (<> peers))
+                (OQ.updatePeersBucket oq BucketSubscriptionListener (<> peers))
                 (\added -> when added $ do
-                    void $ updatePeersBucket BucketSubscriptionListener (removePeer nodeId)
+                    void $ OQ.updatePeersBucket oq BucketSubscriptionListener (removePeer nodeId)
                     logDebug $ sformat ("subscriptionListener: removed "%shown) nodeId)
                 (\added -> when added $ do -- if not added, close the conversation
                     logDebug $ sformat ("subscriptionListener: added "%shown) nodeId
@@ -136,9 +134,9 @@ subscriptionListener1 oq nodeType = listenerConv @Void oq $ \_ nodeId conv -> do
     whenJust mbMsg $ \MsgSubscribe1 -> do
       let peers = simplePeers [(nodeType, nodeId)]
       bracket
-          (updatePeersBucket BucketSubscriptionListener (<> peers))
+          (OQ.updatePeersBucket oq BucketSubscriptionListener (<> peers))
           (\added -> when added $ do
-              void $ updatePeersBucket BucketSubscriptionListener (removePeer nodeId)
+              void $ OQ.updatePeersBucket oq BucketSubscriptionListener (removePeer nodeId)
               logDebug $ sformat ("subscriptionListener1: removed "%shown) nodeId)
           (\added -> when added $ do -- if not added, close the conversation
               logDebug $ sformat ("subscriptionListener1: added "%shown) nodeId

@@ -5,7 +5,6 @@ module Pos.Diffusion.Subscription.Dns
 
 import           Data.Either (partitionEithers)
 import qualified Data.Map.Strict as M
-import           Data.Time.Units (Millisecond, Second, convertUnit)
 import           Formatting (int, sformat, shown, (%))
 import qualified Network.DNS as DNS
 import           System.Wlog (logError, logNotice, logWarning)
@@ -13,30 +12,29 @@ import           Universum
 
 import           Mockable (Concurrently, Delay, Mockable, SharedAtomic, SharedAtomicT, delay,
                            forConcurrently, modifySharedAtomic, newSharedAtomic)
+import           Network.Broadcast.OutboundQueue (Peers)
 import           Network.Broadcast.OutboundQueue.Types (Alts, peersFromList)
 
 import           Pos.Communication.Protocol (Worker)
-import           Pos.KnownPeers (MonadKnownPeers (..))
 import           Pos.Network.DnsDomains (NodeAddr)
 import           Pos.Network.Types (Bucket (..), DnsDomains (..), NetworkConfig (..), NodeId (..),
                                     NodeType (..), resolveDnsDomains)
-import           Pos.Slotting (MonadSlotsData, getNextEpochSlotDuration)
 import           Pos.Diffusion.Subscription.Common
-import           Pos.Util.DynamicTimer (DynamicTimer)
+import           Pos.Util.DynamicTimer (DynamicTimer, dtDuration)
 
 dnsSubscriptionWorker
-    :: forall kademlia ctx m.
+    :: forall kademlia m.
      ( SubscriptionMode m
-     , MonadSlotsData ctx m
      , Mockable Delay m
      , Mockable SharedAtomic m
      , Mockable Concurrently m
      )
-    => NetworkConfig kademlia
+    => (Bucket -> (Peers NodeId -> Peers NodeId) -> m Bool)
+    -> NetworkConfig kademlia
     -> DnsDomains DNS.Domain
     -> DynamicTimer m
     -> Worker m
-dnsSubscriptionWorker networkCfg DnsDomains{..} keepAliveTimer sendActions = do
+dnsSubscriptionWorker updatePeersBucket networkCfg DnsDomains{..} keepAliveTimer sendActions = do
     -- Shared state between the threads which do subscriptions.
     -- It's a 'Map Int (Alts NodeId)' used to determine the current
     -- peers set for our bucket 'BucketBehindNatWorker'. Each thread takes
@@ -81,7 +79,7 @@ dnsSubscriptionWorker networkCfg DnsDomains{..} keepAliveTimer sendActions = do
         -- Try to subscribe to some peer.
         -- If they all fail, wait a while before trying again.
         subscribeToOne dnsPeersList
-        retryInterval >>= delay
+        dtDuration keepAliveTimer >>= delay
         subscribeAlts dnsPeersVar (index, alts)
 
     subscribeToOne :: Alts NodeId -> m ()
@@ -103,13 +101,6 @@ dnsSubscriptionWorker networkCfg DnsDomains{..} keepAliveTimer sendActions = do
         when (null nids)       $ logError (msgNoRelays index)
         when (not (null errs)) $ logError (msgDnsFailure index errs)
         return nids
-
-    -- How long to wait before retrying in case no alternative can be
-    -- subscribed to.
-    retryInterval :: m Millisecond
-    retryInterval = do
-        slotDur <- getNextEpochSlotDuration
-        pure $ max (slotDur `div` 4) (convertUnit (5 :: Second))
 
     msgDnsFailure :: Int -> [DNS.DNSError] -> Text
     msgDnsFailure = sformat ("dnsSubscriptionWorker: DNS failure for index "%int%": "%shown)

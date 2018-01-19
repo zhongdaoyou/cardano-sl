@@ -20,7 +20,6 @@ import           Pos.Block.Configuration (HasBlockConfiguration)
 import           Pos.Configuration (HasNodeConfiguration)
 import           Pos.Core (HasConfiguration)
 import           Pos.Infra.Configuration (HasInfraConfiguration)
-import           Pos.KnownPeers (MonadKnownPeers)
 import           Pos.Ssc.Configuration (HasSscConfiguration)
 import           Pos.Update.Configuration (HasUpdateConfiguration)
 import           Pos.Util.TimeWarp (CanJsonLog)
@@ -29,7 +28,6 @@ type DiffusionWorkMode m
     = ( WithLogger m
       , CanJsonLog m
       , MonadMockable m
-      , MonadKnownPeers m
       , MonadIO m
       , HasConfiguration
       , HasBlockConfiguration

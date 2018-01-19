@@ -65,7 +65,6 @@ import           Pos.Network.CLI (NetworkConfigOpts (..), intNetworkConfigOpts)
 import           Pos.Network.Types (Bucket, NetworkConfig (..), SubscriptionWorker (..),
                                     Topology (..), initQueue, topologySubscribers,
                                     topologySubscriptionWorker)
-import           Pos.Slotting (MonadSlotsData)
 import           Pos.Ssc.Message (MCCommitment, MCOpening, MCShares, MCVssCertificate)
 import           Pos.Update.Configuration (lastKnownBlockVersion)
 import           Pos.Util.OutboundQueue (EnqueuedConversation (..))
@@ -85,9 +84,8 @@ instance (Given (m BlockVersionData)) => HasAdoptedBlockVersionData m where
 -- That's to say, we'd have to do the same work anyway, but then even more
 -- work to juggle the instances.
 diffusionLayerFull
-    :: forall d ctx x .
+    :: forall d x .
        ( DiffusionWorkMode d
-       , MonadSlotsData ctx d
        , MonadFix d
        )
     => NetworkConfigOpts
@@ -292,8 +290,8 @@ diffusionLayerFull networkConfigOpts mEkgStore expectLogic =
 -- | Create kademlia, network-transport, and run the outbound queue's
 -- dequeue thread.
 runDiffusionLayerFull
-    :: forall d ctx x .
-       ( DiffusionWorkMode d, MonadSlotsData ctx d, MonadFix d )
+    :: forall d x .
+       ( DiffusionWorkMode d, MonadFix d )
     => NetworkConfig KademliaParams
     -> VerInfo
     -> OQ.OutboundQ (EnqueuedConversation d) NodeId Bucket
@@ -326,7 +324,7 @@ runDiffusionLayerFull networkConfig ourVerInfo oq slotDuration listeners action 
     subscriptionThread nc sactions = case topologySubscriptionWorker (ncTopology nc) of
         Just (SubscriptionWorkerBehindNAT dnsDomains) -> do
             timer <- newDynamicTimer (convertUnit <$> slotDuration)
-            dnsSubscriptionWorker networkConfig dnsDomains timer sactions
+            dnsSubscriptionWorker (OQ.updatePeersBucket oq) networkConfig dnsDomains timer sactions
         Just (SubscriptionWorkerKademlia kinst nodeType valency fallbacks) ->
             dhtSubscriptionWorker oq kinst nodeType valency fallbacks sactions
         Nothing -> pure ()

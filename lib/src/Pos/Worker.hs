@@ -17,6 +17,7 @@ import           Pos.Delegation.Listeners (delegationRelays)
 import           Pos.Delegation.Worker (dlgWorkers)
 import           Pos.DHT.Workers (dhtWorkers)
 import           Pos.Launcher.Resource (NodeResources (..))
+import           Pos.KnownPeers (MonadKnownPeers (..))
 import           Pos.Network.Types (NetworkConfig (..), SubscriptionWorker (..),
                                     topologyRunKademlia, topologySubscriptionWorker)
 import           Pos.Slotting (logNewSlotWorker, slottingWorkers)
@@ -53,7 +54,7 @@ allWorkers NodeResources {..} = mconcatPair
 
     , wrap' "subscription" $ case topologySubscriptionWorker (ncTopology ncNetworkConfig) of
         Just (SubscriptionWorkerBehindNAT dnsDomains) ->
-          subscriptionWorker (dnsSubscriptionWorker ncNetworkConfig dnsDomains
+          subscriptionWorker (dnsSubscriptionWorker updatePeersBucket ncNetworkConfig dnsDomains
                                                     (asDynamicTimer ncSubscriptionKeepAliveTimer))
         Just (SubscriptionWorkerKademlia kinst nodeType valency fallbacks) ->
           subscriptionWorker (dhtSubscriptionWorker kinst nodeType valency fallbacks)
