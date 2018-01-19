@@ -25,7 +25,7 @@ import           Universum
 import           Control.Concurrent.STM (newEmptyTMVarIO, newTBQueueIO)
 import           Data.Default (Default)
 import qualified Data.Time as Time
-import           Data.Time.Units (toMicroseconds)
+import           Data.Time.Units (Microsecond, convertUnit)
 import           Formatting (sformat, shown, (%))
 import           Mockable (Production (..))
 import           Network.QDisc.Fair (fairQDisc)
@@ -292,9 +292,9 @@ allocateNodeContext ancd txpSettings ekgStore = do
     -- TODO synchronize the NodeContext peers var with whatever system
     -- populates it.
     peersVar <- newTVarIO mempty
-    let slotDuration :: Integer
-        slotDuration = toMicroseconds . bvdSlotDuration $ gdBlockVersionData genesisData
-    ncSubscriptionKeepAliveTimer <- newTimer $ 3 * fromIntegral slotDuration
+    let slotDuration :: Microsecond
+        slotDuration = convertUnit . bvdSlotDuration $ gdBlockVersionData genesisData
+    ncSubscriptionKeepAliveTimer <- newTimer $ 3 * slotDuration
     mm <- initializeMisbehaviorMetrics ekgStore
 
     let ctx =

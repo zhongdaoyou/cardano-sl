@@ -13,7 +13,7 @@ import           Universum
 import           Control.Monad.Fix (MonadFix)
 import qualified Data.Map as M
 import           Data.Reflection (Given, give, given)
-import           Data.Time.Units (Millisecond, toMicroseconds)
+import           Data.Time.Units (Millisecond, convertUnit)
 import           Formatting (sformat, shown, (%))
 import           Mockable (withAsync)
 import           Mockable.Production (Production)
@@ -325,7 +325,7 @@ runDiffusionLayerFull networkConfig ourVerInfo oq slotDuration listeners action 
         return ((>>= either throwM return) <$> itMap)
     subscriptionThread nc sactions = case topologySubscriptionWorker (ncTopology nc) of
         Just (SubscriptionWorkerBehindNAT dnsDomains) -> do
-            timer <- newTimer . fromIntegral . toMicroseconds =<< slotDuration
+            timer <- newTimer . convertUnit =<< slotDuration
             dnsSubscriptionWorker networkConfig dnsDomains timer sactions
         Just (SubscriptionWorkerKademlia kinst nodeType valency fallbacks) ->
             dhtSubscriptionWorker oq kinst nodeType valency fallbacks sactions
