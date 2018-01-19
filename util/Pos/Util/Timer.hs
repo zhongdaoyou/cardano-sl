@@ -22,11 +22,13 @@ module Pos.Util.Timer
     , setTimerDuration
     , waitTimer
     , startTimer
+    , asDynamicTimer
     ) where
 
 import           Data.Time.Units (Microsecond)
 import           Control.Concurrent (modifyMVar_)
 import           Control.Concurrent.STM (readTVar, registerDelay, retry)
+import           Pos.Util.DynamicTimer(DynamicTimer(..))
 import           Universum
 
 data Timer = Timer
@@ -58,3 +60,7 @@ waitTimer Timer{..} = do
 startTimer :: MonadIO m => Timer -> m ()
 startTimer Timer{..} = liftIO (registerDelay . fromIntegral =<< readMVar timerDuration)
     >>= atomically . writeTVar timerSemaphore
+
+-- Cast a `Timer` to `DynamicTimer`.
+asDynamicTimer :: MonadIO m => Timer -> DynamicTimer m
+asDynamicTimer Timer{..} = DynamicTimer (readMVar timerDuration) timerSemaphore

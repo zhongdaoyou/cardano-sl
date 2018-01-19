@@ -37,6 +37,7 @@ library
                        Pos.Util.Queue
                        Pos.Util.Some
                        Pos.Util.Timer
+                       Pos.Util.DynamicTimer
                        Pos.Util.Util
 
   other-modules:
