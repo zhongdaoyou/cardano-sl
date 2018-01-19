@@ -22,7 +22,7 @@ import           Pos.Network.Types (Bucket (..), DnsDomains (..), NetworkConfig 
                                     NodeType (..), resolveDnsDomains)
 import           Pos.Slotting (MonadSlotsData, getNextEpochSlotDuration)
 import           Pos.Diffusion.Subscription.Common
-import           Pos.Util.Timer (Timer)
+import           Pos.Util.DynamicTimer (DynamicTimer)
 
 dnsSubscriptionWorker
     :: forall kademlia ctx m.
@@ -34,7 +34,7 @@ dnsSubscriptionWorker
      )
     => NetworkConfig kademlia
     -> DnsDomains DNS.Domain
-    -> Timer
+    -> DynamicTimer m
     -> Worker m
 dnsSubscriptionWorker networkCfg DnsDomains{..} keepAliveTimer sendActions = do
     -- Shared state between the threads which do subscriptions.

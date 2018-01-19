@@ -30,6 +30,7 @@ import           Pos.Update (usRelays, usWorkers)
 import           Pos.Util (mconcatPair)
 import           Pos.Util.JsonLog (JLEvent (JLTxReceived))
 import           Pos.Util.TimeWarp (jsonLog)
+import           Pos.Util.Timer (asDynamicTimer)
 import           Pos.WorkMode (WorkMode)
 
 -- | All, but in reality not all, workers used by full node.
@@ -53,7 +54,7 @@ allWorkers NodeResources {..} = mconcatPair
     , wrap' "subscription" $ case topologySubscriptionWorker (ncTopology ncNetworkConfig) of
         Just (SubscriptionWorkerBehindNAT dnsDomains) ->
           subscriptionWorker (dnsSubscriptionWorker ncNetworkConfig dnsDomains
-                                                    ncSubscriptionKeepAliveTimer)
+                                                    (asDynamicTimer ncSubscriptionKeepAliveTimer))
         Just (SubscriptionWorkerKademlia kinst nodeType valency fallbacks) ->
           subscriptionWorker (dhtSubscriptionWorker kinst nodeType valency fallbacks)
         Nothing ->

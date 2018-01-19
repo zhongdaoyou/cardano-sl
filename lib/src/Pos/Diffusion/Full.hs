@@ -69,7 +69,7 @@ import           Pos.Slotting (MonadSlotsData)
 import           Pos.Ssc.Message (MCCommitment, MCOpening, MCShares, MCVssCertificate)
 import           Pos.Update.Configuration (lastKnownBlockVersion)
 import           Pos.Util.OutboundQueue (EnqueuedConversation (..))
-import           Pos.Util.Timer (newTimer)
+import           Pos.Util.DynamicTimer (newDynamicTimer)
 
 {-# ANN module ("HLint: ignore Reduce duplication" :: Text) #-}
 
@@ -325,7 +325,7 @@ runDiffusionLayerFull networkConfig ourVerInfo oq slotDuration listeners action 
         return ((>>= either throwM return) <$> itMap)
     subscriptionThread nc sactions = case topologySubscriptionWorker (ncTopology nc) of
         Just (SubscriptionWorkerBehindNAT dnsDomains) -> do
-            timer <- newTimer . convertUnit =<< slotDuration
+            timer <- newDynamicTimer (convertUnit <$> slotDuration)
             dnsSubscriptionWorker networkConfig dnsDomains timer sactions
         Just (SubscriptionWorkerKademlia kinst nodeType valency fallbacks) ->
             dhtSubscriptionWorker oq kinst nodeType valency fallbacks sactions

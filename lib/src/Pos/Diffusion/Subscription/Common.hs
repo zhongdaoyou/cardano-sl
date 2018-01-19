@@ -29,7 +29,7 @@ import           Pos.Communication.Protocol (Conversation (..), ConversationActi
                                              toOutSpecs, withConnectionTo, worker)
 import           Pos.KnownPeers (MonadKnownPeers (..))
 import           Pos.Network.Types (Bucket (..), NodeType)
-import           Pos.Util.Timer (Timer, setTimerDuration, startTimer, waitTimer)
+import           Pos.Util.DynamicTimer (DynamicTimer, startDynamicTimer, waitDynamicTimer)
 
 type SubscriptionMode m =
     ( MonadIO m
@@ -56,7 +56,7 @@ data SubscriptionTerminationReason =
 -- giving the reason. Notices will be logged before and after the subscription.
 subscribeTo
     :: forall m. (SubscriptionMode m)
-    => Timer -> SendActions m -> NodeId -> m SubscriptionTerminationReason
+    => DynamicTimer m -> SendActions m -> NodeId -> m SubscriptionTerminationReason
 subscribeTo keepAliveTimer sendActions peer = do
     logNotice $ msgSubscribingTo peer
     outcome <- try $ withConnectionTo sendActions peer $ \_peerData -> NE.fromList
@@ -73,15 +73,11 @@ subscribeTo keepAliveTimer sendActions peer = do
     convMsgSubscribe conv = do
         send conv MsgSubscribe
         forever $ do
-            startTimer keepAliveTimer
-            atomically $ waitTimer keepAliveTimer
+            startDynamicTimer keepAliveTimer
+            atomically $ waitDynamicTimer keepAliveTimer
             logDebug $ sformat ("subscriptionWorker: sending keep-alive to "%shown)
                                 peer
             send conv MsgSubscribeKeepAlive
-            -- If there is a suspicion that subscriptions are no longer valid,
-            -- we want to start sending keep-alive packets more frequently. Use
-            -- 20 seconds as we don't have access to slot duration here.
-            setTimerDuration keepAliveTimer $ 20 * 1000000
 
     convMsgSubscribe1 :: ConversationActions MsgSubscribe1 Void m -> m (Maybe Void)
     convMsgSubscribe1 conv = do
