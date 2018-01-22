@@ -326,7 +326,7 @@ runDiffusionLayerFull networkConfig ourVerInfo oq slotDuration listeners action 
             timer <- newDynamicTimer (convertUnit <$> slotDuration)
             dnsSubscriptionWorker (OQ.updatePeersBucket oq) networkConfig dnsDomains timer sactions
         Just (SubscriptionWorkerKademlia kinst nodeType valency fallbacks) ->
-            dhtSubscriptionWorker oq kinst nodeType valency fallbacks sactions
+            dhtSubscriptionWorker (OQ.updatePeersBucket oq) kinst nodeType valency fallbacks sactions
         Nothing -> pure ()
 
 sendMsgFromConverse

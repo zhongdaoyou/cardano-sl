@@ -92,9 +92,6 @@ library
                         Pos.Shutdown.Logic
                         Pos.Shutdown.Types
 
-                        -- Subscription
-                        Pos.Subscription.Dht
-
                         -- NTP
                         Pos.NtpCheck
 

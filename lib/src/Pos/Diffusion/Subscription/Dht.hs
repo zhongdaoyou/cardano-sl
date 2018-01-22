@@ -7,7 +7,6 @@ import qualified Control.Concurrent.STM as STM
 import           Universum
 
 import           Formatting (sformat, shown, (%))
-import qualified Network.Broadcast.OutboundQueue as OQ
 import           Network.Broadcast.OutboundQueue.Types (Peers)
 import           System.Wlog (WithLogger, logNotice)
 
@@ -22,18 +21,18 @@ import           Pos.Util.TimeWarp (addressToNodeId)
 -- | This worker will update the known peers (via MonadKnownPeers) every time
 -- the Kademlia peers change.
 dhtSubscriptionWorker
-    :: forall pack m .
+    :: forall m .
        ( MonadIO m
        , WithLogger m
        , HasInfraConfiguration
        )
-    => OQ.OutboundQ pack NodeId Bucket
+    => (Bucket -> (Peers NodeId -> Peers NodeId) -> m Bool)
     -> KademliaDHTInstance
     -> NodeType
     -> Int -- ^ valency
     -> Int -- ^ fallbacks
     -> Worker m
-dhtSubscriptionWorker oq kademliaInst peerType valency fallbacks _sendActions = do
+dhtSubscriptionWorker updatePeersBucket kademliaInst peerType valency fallbacks _sendActions = do
     logNotice "Kademlia subscription worker started"
     updateForeverNoSubscribe mempty
     {-
@@ -172,7 +171,7 @@ dhtSubscriptionWorker oq kademliaInst peerType valency fallbacks _sendActions = 
         peers' <- atomically $ updateFromKademliaNoSubscribe peers
         logNotice $
             sformat ("Kademlia peer set changed to "%shown) peers'
-        void $ OQ.updatePeersBucket oq BucketKademliaWorker (const peers')
+        void $ updatePeersBucket BucketKademliaWorker (const peers')
         updateForeverNoSubscribe peers'
 
     updateFromKademliaNoSubscribe

@@ -24,7 +24,7 @@ import           Pos.Slotting (logNewSlotWorker, slottingWorkers)
 import           Pos.Ssc (sscRelays)
 import           Pos.Ssc.Worker (sscWorkers)
 import           Pos.Diffusion.Subscription.Common (subscriptionWorker)
-import           Pos.Subscription.Dht (dhtSubscriptionWorker)
+import           Pos.Diffusion.Subscription.Dht (dhtSubscriptionWorker)
 import           Pos.Diffusion.Subscription.Dns (dnsSubscriptionWorker)
 import           Pos.Txp (txRelays)
 import           Pos.Update (usRelays, usWorkers)
@@ -57,7 +57,7 @@ allWorkers NodeResources {..} = mconcatPair
           subscriptionWorker (dnsSubscriptionWorker updatePeersBucket ncNetworkConfig dnsDomains
                                                     (asDynamicTimer ncSubscriptionKeepAliveTimer))
         Just (SubscriptionWorkerKademlia kinst nodeType valency fallbacks) ->
-          subscriptionWorker (dhtSubscriptionWorker kinst nodeType valency fallbacks)
+          subscriptionWorker (dhtSubscriptionWorker updatePeersBucket kinst nodeType valency fallbacks)
         Nothing ->
           mempty
 
