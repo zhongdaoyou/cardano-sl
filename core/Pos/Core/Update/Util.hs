@@ -3,7 +3,8 @@
 module Pos.Core.Update.Util
        (
          -- * Checkers/validators.
-         checkUpdateProposal
+         checkUpdatePayload
+       , checkUpdateProposal
        , checkUpdateVote
 
        , mkUpdateProposalWSign
@@ -32,10 +33,19 @@ import           Pos.Binary.Crypto ()
 import           Pos.Core.Configuration (HasConfiguration)
 import           Pos.Core.Update.Types (BlockVersion, BlockVersionModifier (..), SoftforkRule,
                                         SoftwareVersion, SystemTag, UpAttributes, UpdateData,
-                                        UpdatePayload, UpdateProof, UpdateProposal (..),
+                                        UpdatePayload (..), UpdateProof, UpdateProposal (..),
                                         UpdateProposalToSign (..), UpdateVote (..), VoteId)
 import           Pos.Crypto (PublicKey, SafeSigner, SignTag (SignUSProposal, SignUSVote),
                              Signature, checkSig, hash, safeSign, safeToPublic)
+
+checkUpdatePayload
+    :: (HasConfiguration, MonadError Text m, Bi UpdateProposalToSign)
+    => UpdatePayload
+    -> m UpdatePayload
+checkUpdatePayload it = do
+    _ <- forM (upProposal it) checkUpdateProposal
+    _ <- forM (upVotes it) checkUpdateVote
+    pure it
 
 -- | 'SoftforkRule' formatter which restricts type.
 softforkRuleF :: Format r (SoftforkRule -> r)
