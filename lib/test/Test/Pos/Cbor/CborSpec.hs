@@ -29,6 +29,7 @@ import           Pos.Arbitrary.Infra ()
 import           Pos.Arbitrary.Slotting ()
 import           Pos.Arbitrary.Ssc ()
 import           Pos.Arbitrary.Update ()
+import           Pos.Arbitrary.Update.Core ()
 import           Pos.Binary.Class
 import           Pos.Binary.Communication ()
 import           Pos.Binary.Core ()
@@ -340,10 +341,10 @@ spec = withDefConfiguration $ do
             it "UserSecret" $ pendingWith "No Eq instance defined"
             it "WalletUserSecret" $ pendingWith "No Eq instance defined"
             -- pendingNoArbitrary "Undo" DONE
-            pendingNoArbitrary "DataMsg (UpdateProposal, [UpdateVote])"
-            pendingNoArbitrary "DataMsg UpdateVote"
-            pendingNoArbitrary "MsgGetHeaders"
-            pendingNoArbitrary "MsgGetBlocks"
+            -- pendingNoArbitrary "DataMsg (UpdateProposal, [UpdateVote])"
+            -- pendingNoArbitrary "DataMsg UpdateVote"
+            -- pendingNoArbitrary "MsgGetHeaders"
+            -- pendingNoArbitrary "MsgGetBlocks"
             pendingNoArbitrary "WithHash"
             pendingNoArbitrary "Pvss.PublicKey"
             pendingNoArbitrary "Pvss.KeyPair"

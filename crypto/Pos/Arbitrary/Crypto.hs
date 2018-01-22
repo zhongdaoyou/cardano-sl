@@ -17,7 +17,7 @@ import           Pos.Binary.Class (AsBinary (..), AsBinaryClass (..), Bi, Raw)
 import           Pos.Binary.Crypto ()
 import           Pos.Crypto.AsBinary ()
 import           Pos.Crypto.Configuration (HasCryptoConfiguration, ProtocolMagic (..))
-import           Pos.Crypto.Hashing (AHash (..), AbstractHash (..), HashAlgorithm,
+import           Pos.Crypto.Hashing (AHash (..), AbstractHash (..), HashAlgorithm, WithHash (..),
                                      unsafeCheatingHashCoerce)
 import           Pos.Crypto.HD (HDAddressPayload, HDPassphrase (..))
 import           Pos.Crypto.Random (deterministic, randomNumberInRange)
@@ -224,3 +224,11 @@ instance Arbitrary HDPassphrase where
 
 instance Arbitrary HDAddressPayload where
     arbitrary = genericArbitrary
+
+----------------------------------------------------------------------------
+-- WithHash
+----------------------------------------------------------------------------
+
+instance (Bi a, Arbitrary a) => Arbitrary (WithHash a) where
+    arbitrary = genericArbitrary
+    shrink = genericShrink
