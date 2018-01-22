@@ -89,7 +89,7 @@ curSoftwareVersion = SoftwareVersion ourAppName (ccApplicationVersion updateConf
 -- information.
 currentSystemTag :: SystemTag
 currentSystemTag =
-    $(do let st :: Either String SystemTag
+    $(do let st :: Either Text SystemTag
              st = mkSystemTag (toText (osHelper buildOS ++ archHelper buildArch))
              color c s = "\n" <> colorize c s <> "\n"
          case st of Left e -> error . color Red . T.concat $
