@@ -29,7 +29,7 @@ ftsBench n = env genArgs $ bench msg . whnf (uncurry followTheSatoshi)
           msg = toString $ sformat ("followTheSatoshi: Utxo of size "%int) n
 
 ftsConfig :: Config
-ftsConfig = defaultConfig
+ftsConfig = defaultConfig023
     { reportFile = Just "followTheSatoshi.html"
     }
 
