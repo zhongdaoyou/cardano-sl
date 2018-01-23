@@ -99,9 +99,9 @@ instance (MonadPollRead m) =>
         extractOld (PSDecided _) = Nothing
         getOldProposalPairs =
             map (\ups -> (hash $ upsProposal ups, ups)) <$> getOldProposals sl
-    getDeepProposals cd = ether $
-        map snd <$>
-        (MM.mapMaybeM getDeepProposalPairs extractDeep =<< use pmActivePropsL)
+    getDeepProposals cd = ether $ do
+        props <- use pmActivePropsL
+        map snd <$> MM.mapMaybeM getDeepProposalPairs extractDeep props
       where
         extractDeep (PSDecided dps)
             | Just propDifficulty <- dpsDifficulty dps

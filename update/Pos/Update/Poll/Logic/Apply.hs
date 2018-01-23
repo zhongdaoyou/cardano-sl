@@ -98,10 +98,10 @@ verifyAndApplyUSPayload lastAdopted verifyAllIsKnown slotOrHeader UpdatePayload 
     case slotOrHeader of
         Left _           -> pass
         Right mainHeader -> do
---            applyImplicitAgreement
---                (mainHeader ^. headerSlotL)
---                (mainHeader ^. difficultyL)
---                (mainHeader ^. headerHashG)
+            applyImplicitAgreement
+                (mainHeader ^. headerSlotL)
+                (mainHeader ^. difficultyL)
+                (mainHeader ^. headerHashG)
             applyDepthCheck
                 (mainHeader ^. epochIndexL)
                 (mainHeader ^. headerHashG)
@@ -290,8 +290,10 @@ applyImplicitAgreement
 applyImplicitAgreement (flattenSlotId -> slotId) cd hh = do
     BlockVersionData {..} <- getAdoptedBVData
     let oldSlot = unflattenSlotId $ slotId - bvdUpdateImplicit
-    unless (slotId < bvdUpdateImplicit) $
-        mapM_ applyImplicitAgreementDo =<< getOldProposals oldSlot
+    oldProps <- getOldProposals oldSlot
+    unless (null oldProps) $ do
+        unless (slotId < bvdUpdateImplicit) $
+            mapM_ applyImplicitAgreementDo =<< getOldProposals oldSlot
   where
     applyImplicitAgreementDo ups = do
         let decided = makeImplicitlyDecided ups

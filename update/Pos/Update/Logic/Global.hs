@@ -165,12 +165,12 @@ verifyBlock lastAdopted verifyAllIsKnown (Right (header, payload)) =
         -- payload, so it's fine to separate it. Note, however, that it's
         -- important to do it after 'verifyAndApplyUSPayload', because there
         -- we assume that block version is confirmed.
---        let leaderPk = header ^. headerLeaderKeyL
---        recordBlockIssuance
---            (addressHash leaderPk)
---            (header ^. blockVersionL)
---            (header ^. headerSlotL)
---            (header ^. headerHashG)
+        let leaderPk = header ^. headerLeaderKeyL
+        recordBlockIssuance
+            (addressHash leaderPk)
+            (header ^. blockVersionL)
+            (header ^. headerSlotL)
+            (header ^. headerHashG)
 
 -- | Checks whether our software can create block according to current
 -- global state.

@@ -70,6 +70,10 @@ instance (Buildable k, Buildable v) => Buildable (MapModifier k v) where
       bprint ("MapModifier { deletions "%listJson%", insertions: "%listJson%"}")
       (deletions mm) (map (bprint pairF) (insertions mm))
 
+-- | Checks if 'MapModifier' is empty.
+isEmpty :: MapModifier k v -> Bool
+isEmpty (MapModifier hm) = HM.null hm
+
 -- | Perform monadic lookup taking 'MapModifier' into account.
 lookupM
     :: (Applicative m, Eq k, Hashable k)
@@ -192,18 +196,19 @@ alter f key (MapModifier mm) = MapModifier $ HM.alter transformedF key mm
 mapMaybeM
     :: (Functor m, Eq k, Hashable k)
     => m [(k, v2)] -> (v1 -> Maybe v2) -> MapModifier k v1 -> m [(k, v2)]
-mapMaybeM getter f mm@(MapModifier m) = mapMaybeDo <$> getter
-  where
-    mapMaybeDo kvs =
-        Universum.mapMaybe (\(k, v) -> (k, ) <$> f v) (insertions mm) <>
-        Universum.filter (not . flip HM.member m . fst) kvs
+mapMaybeM getter f mm = (\x -> mapMaybe x f mm) <$> getter
 
 -- | Transform this modifier by applying a function to every insertion and retaining
 -- only some of them. Underlying map should be already transformed.
 mapMaybe
     :: (Eq k, Hashable k)
     => [(k, v2)] -> (v1 -> Maybe v2) -> MapModifier k v1 -> [(k, v2)]
-mapMaybe getter f = runIdentity . mapMaybeM (Identity getter) f
+mapMaybe vals f mm@(MapModifier m) =
+    if null vals && isEmpty mm then [] else mapMaybeDo vals
+  where
+    mapMaybeDo kvs =
+        Universum.mapMaybe (\(k, v) -> (k, ) <$> f v) (insertions mm) <>
+        Universum.filter (not . flip HM.member m . fst) kvs
 
 -- | Applies a map modifier to a hashmap, returning the result
 modifyHashMap :: (Eq k, Hashable k) => MapModifier k v -> HashMap k v -> HashMap k v
