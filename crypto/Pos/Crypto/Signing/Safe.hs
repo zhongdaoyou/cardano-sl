@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Module for safe (zero-memory) signing.
 
 module Pos.Crypto.Signing.Safe
@@ -33,6 +35,7 @@ import           Pos.Crypto.Signing.Signing (ProxyCert (..), ProxySecretKey (..)
                                              SecretKey (..), Signature (..), sign, toPublic)
 import           Pos.Crypto.Signing.Tag (SignTag (SignProxySK), signTag)
 import           Pos.Crypto.Signing.Types.Safe
+import           Pos.Util.Verification (Ver (..))
 
 -- | Regenerates secret key with new passphrase.
 -- Note: This operation keeps corresponding public key and derived (child) keys unchanged.
@@ -150,9 +153,14 @@ safeCreateProxyCert ss (PublicKey delegatePk) o = coerce $ ProxyCert sig
                           ["00", CC.unXPub delegatePk, Bi.serialize' o]
 
 -- | Creates proxy secret key
-safeCreatePsk :: (HasCryptoConfiguration, Bi w) => SafeSigner -> PublicKey -> w -> ProxySecretKey w
+safeCreatePsk ::
+       (HasCryptoConfiguration, Bi w)
+    => SafeSigner
+    -> PublicKey
+    -> w
+    -> ProxySecretKey w 'Ver
 safeCreatePsk ss delegatePk w =
-    ProxySecretKey w (safeToPublic ss) delegatePk $ safeCreateProxyCert ss delegatePk w
+    UnsafeProxySecretKey w (safeToPublic ss) delegatePk $ safeCreateProxyCert ss delegatePk w
 
 -- [CSL-1157] `createProxyCert` and `createProxySecretKey` are not safe and
 --   left here because of their implementation details
@@ -164,5 +172,10 @@ createProxyCert :: (HasCryptoConfiguration, Bi w) => SecretKey -> PublicKey -> w
 createProxyCert = safeCreateProxyCert . fakeSigner
 
 -- | Creates proxy secret key
-createPsk :: (HasCryptoConfiguration, Bi w) => SecretKey -> PublicKey -> w -> ProxySecretKey w
+createPsk ::
+       (HasCryptoConfiguration, Bi w)
+    => SecretKey
+    -> PublicKey
+    -> w
+    -> ProxySecretKey w 'Ver
 createPsk = safeCreatePsk . fakeSigner

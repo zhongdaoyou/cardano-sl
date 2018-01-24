@@ -1,5 +1,7 @@
-{-# LANGUAGE CPP          #-}
-{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE CPP            #-}
+{-# LANGUAGE DataKinds      #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE ViewPatterns   #-}
 
 -- | Serializable instances for Pos.Crypto.*
 
@@ -8,8 +10,8 @@ module Pos.Binary.Crypto () where
 import           Universum
 
 import qualified Cardano.Crypto.Wallet as CC
+import           Crypto.Hash (byteStringFromDigest, digestFromByteString)
 import qualified Crypto.Math.Edwards25519 as Ed25519
-import           Crypto.Hash (Digest, digestFromByteString, byteStringFromDigest)
 import qualified Crypto.PVSS as Pvss
 import qualified Crypto.SCRAPE as Scrape
 import qualified Crypto.Sign.Ed25519 as EdStandard
@@ -31,6 +33,7 @@ import           Pos.Crypto.Signing.Types.Redeem (RedeemPublicKey (..), RedeemSe
                                                   RedeemSignature (..))
 import           Pos.Crypto.Signing.Types.Safe (EncryptedSecretKey (..), PassPhrase,
                                                 passphraseLength)
+import           Pos.Util.Verification (Ver (..))
 
 instance Bi a => Bi (WithHash a) where
     encode = encode . whData
@@ -197,26 +200,31 @@ instance Bi a => Bi (Signed a) where
 
 deriving instance Typeable w => Bi (ProxyCert w)
 
-instance Bi w => Bi (ProxySecretKey w) where
-    encode ProxySecretKey{..} = encodeListLen 4
-                             <> encode pskOmega
-                             <> encode pskIssuerPk
-                             <> encode pskDelegatePk
-                             <> encode pskCert
-    decode = ProxySecretKey <$  enforceSize "ProxySecretKey" 4
-                            <*> decode
-                            <*> decode
-                            <*> decode
-                            <*> decode
+instance Bi w => Bi (ProxySecretKey w 'Unver) where
+    encode UnsafeProxySecretKey {..} =
+        encodeListLen 4 <>
+        encode pskOmega <>
+        encode pskIssuerPk <>
+        encode pskDelegatePk <>
+        encode pskCert
+    decode =
+        UnsafeProxySecretKey <$
+        enforceSize "ProxySecretKey" 4 <*>
+        decode <*>
+        decode <*>
+        decode <*>
+        decode
 
-instance (Typeable a, Bi w) => Bi (ProxySignature w a) where
-    encode ProxySignature{..} = encodeListLen 2
-                             <> encode psigPsk
-                             <> encode psigSig
-    decode = ProxySignature
-          <$  enforceSize "ProxySignature" 2
-          <*> decode
-          <*> decode
+instance (Typeable a, Bi w) => Bi (ProxySignature w a 'Unver) where
+    encode UnsafeProxySignature {..} =
+        encodeListLen 2 <>
+        encode psigPsk <>
+        encode psigSig
+    decode =
+        UnsafeProxySignature <$
+        enforceSize "ProxySignature" 2 <*>
+        decode <*>
+        decode
 
 instance Bi PassPhrase where
     -- FIXME convert is slow.

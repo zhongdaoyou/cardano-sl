@@ -1,3 +1,6 @@
+{-# LANGUAGE DataKinds      #-}
+{-# LANGUAGE KindSignatures #-}
+
 -- | Signing done with public/private keys.
 
 module Pos.Crypto.Signing.Types.Signing
@@ -41,6 +44,7 @@ import           Universum hiding (show)
 
 import           Pos.Binary.Class (Bi)
 import           Pos.Crypto.Hashing (hash)
+import           Pos.Util.Verification (Ver (..))
 
 ----------------------------------------------------------------------------
 -- Orphan instances
@@ -141,23 +145,23 @@ instance B.Buildable (ProxyCert w) where
 
 -- | Convenient wrapper for secret key, that's basically ω plus
 -- certificate.
-data ProxySecretKey w = ProxySecretKey
+data ProxySecretKey w (v :: Ver) = UnsafeProxySecretKey
     { pskOmega      :: w
     , pskIssuerPk   :: PublicKey
     , pskDelegatePk :: PublicKey
     , pskCert       :: ProxyCert w
     } deriving (Eq, Ord, Show, Generic)
 
-instance NFData w => NFData (ProxySecretKey w)
-instance Hashable w => Hashable (ProxySecretKey w)
+instance NFData w => NFData (ProxySecretKey w v)
+instance Hashable w => Hashable (ProxySecretKey w v)
 
 instance {-# OVERLAPPABLE #-}
-         (B.Buildable w, Bi PublicKey) => B.Buildable (ProxySecretKey w) where
-    build (ProxySecretKey w iPk dPk _) =
+         (B.Buildable w, Bi PublicKey) => B.Buildable (ProxySecretKey w v) where
+    build (UnsafeProxySecretKey w iPk dPk _) =
         bprint ("ProxySk { w = "%build%", iPk = "%build%", dPk = "%build%" }") w iPk dPk
 
-instance (B.Buildable w, Bi PublicKey) => B.Buildable (ProxySecretKey (w,w)) where
-    build (ProxySecretKey w iPk dPk _) =
+instance (B.Buildable w, Bi PublicKey) => B.Buildable (ProxySecretKey (w,w) v) where
+    build (UnsafeProxySecretKey w iPk dPk _) =
         bprint ("ProxySk { w = "%pairF%", iPk = "%build%", dPk = "%build%" }") w iPk dPk
 
 -- | Delegate signature made with certificate-based permission. @w@
@@ -167,22 +171,22 @@ instance (B.Buildable w, Bi PublicKey) => B.Buildable (ProxySecretKey (w,w)) whe
 -- We add whole psk as a field because otherwise we can't verify sig
 -- in heavyweight psk transitive delegation: i → x → d, we have psk
 -- from x to d, slot leader is i.
-data ProxySignature w a = ProxySignature
-    { psigPsk :: ProxySecretKey w
+data ProxySignature w a (v :: Ver) = UnsafeProxySignature
+    { psigPsk :: ProxySecretKey w v
     , psigSig :: CC.XSignature
     } deriving (Eq, Ord, Show, Generic)
 
-instance NFData w => NFData (ProxySignature w a)
-instance Hashable w => Hashable (ProxySignature w a)
+instance NFData w => NFData (ProxySignature w a v)
+instance Hashable w => Hashable (ProxySignature w a v)
 
 instance {-# OVERLAPPABLE #-}
-         (B.Buildable w, Bi PublicKey) => B.Buildable (ProxySignature w a) where
-    build ProxySignature{..} = bprint ("Proxy signature { psk = "%build%" }") psigPsk
+         (B.Buildable w, Bi PublicKey) => B.Buildable (ProxySignature w a v) where
+    build UnsafeProxySignature{..} = bprint ("Proxy signature { psk = "%build%" }") psigPsk
 
-instance (B.Buildable w, Bi PublicKey) => B.Buildable (ProxySignature (w,w) a) where
-    build ProxySignature{..} = bprint ("Proxy signature { psk = "%build%" }") psigPsk
+instance (B.Buildable w, Bi PublicKey) => B.Buildable (ProxySignature (w,w) a v) where
+    build UnsafeProxySignature{..} = bprint ("Proxy signature { psk = "%build%" }") psigPsk
 
 -- | Checks if delegate and issuer fields of proxy secret key are
 -- equal.
-isSelfSignedPsk :: ProxySecretKey w -> Bool
-isSelfSignedPsk ProxySecretKey{..} = pskIssuerPk == pskDelegatePk
+isSelfSignedPsk :: ProxySecretKey w 'Ver -> Bool
+isSelfSignedPsk UnsafeProxySecretKey{..} = pskIssuerPk == pskDelegatePk

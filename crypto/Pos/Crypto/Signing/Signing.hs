@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Signing done with public/private keys.
 
 module Pos.Crypto.Signing.Signing
@@ -23,7 +25,6 @@ module Pos.Crypto.Signing.Signing
        , verifyProxyCert
        , fullProxyCertHexF
        , parseFullProxyCert
-       , verifyPsk
        , proxySign
        , proxyVerify
 
@@ -47,6 +48,7 @@ import           Pos.Crypto.Configuration (HasCryptoConfiguration)
 import           Pos.Crypto.Signing.Tag (signTag)
 import           Pos.Crypto.Signing.Types.Signing
 import           Pos.Crypto.Signing.Types.Tag (SignTag (SignProxySK))
+import           Pos.Util.Verification (Ver (..), Verifiable (..), verField)
 
 ----------------------------------------------------------------------------
 -- Keys, key generation & printing & decoding
@@ -164,11 +166,17 @@ parseFullProxyCert s = do
     b <- B16.decode s
     ProxyCert <$> first fromString (CC.xsignature b)
 
--- | Checks if proxy secret key is valid (the signature/cert inside is
--- correct).
-verifyPsk :: (HasCryptoConfiguration, Bi w) => ProxySecretKey w -> Bool
-verifyPsk ProxySecretKey{..} =
-    verifyProxyCert pskIssuerPk pskDelegatePk pskOmega pskCert
+instance (Buildable w, Bi w, HasCryptoConfiguration) => Verifiable (ProxySecretKey w) where
+    toVerified psk@UnsafeProxySecretKey{..} =
+        bool (Left $ "PSK " <> pretty psk <> " is invalid")
+             (Right (coerce psk :: ProxySecretKey w 'Ver))
+             (verifyProxyCert pskIssuerPk pskDelegatePk pskOmega pskCert)
+
+instance (Buildable w, Bi w, HasCryptoConfiguration) => Verifiable (ProxySignature w a) where
+    toVerified UnsafeProxySignature {..} =
+        UnsafeProxySignature <$>
+        verField "psigPsk" psigPsk <*>
+        pure psigSig
 
 -- | Make a proxy delegate signature with help of certificate. If the
 -- delegate secret key passed doesn't pair with delegate public key in
@@ -176,14 +184,14 @@ verifyPsk ProxySecretKey{..} =
 -- of this function.
 proxySign
     :: (HasCryptoConfiguration, Bi a)
-    => SignTag -> SecretKey -> ProxySecretKey w -> a -> ProxySignature w a
-proxySign t sk@(SecretKey delegateSk) psk@ProxySecretKey{..} m
+    => SignTag -> SecretKey -> ProxySecretKey w 'Ver -> a -> ProxySignature w a 'Ver
+proxySign t sk@(SecretKey delegateSk) psk@UnsafeProxySecretKey{..} m
     | toPublic sk /= pskDelegatePk =
         error $ sformat ("proxySign called with irrelevant certificate "%
                          "(psk delegatePk: "%build%", real delegate pk: "%build%")")
                         pskDelegatePk (toPublic sk)
     | otherwise =
-        ProxySignature
+        UnsafeProxySignature
         { psigPsk = psk
         , psigSig = sigma
         }
@@ -201,15 +209,14 @@ proxySign t sk@(SecretKey delegateSk) psk@ProxySecretKey{..} m
 -- space predicate and message itself.
 proxyVerify
     :: (HasCryptoConfiguration, Bi w, Bi a)
-    => SignTag -> ProxySignature w a -> (w -> Bool) -> a -> Bool
-proxyVerify t ProxySignature{..} omegaPred m =
-    and [predCorrect, pskValid, sigValid]
+    => SignTag -> ProxySignature w a 'Ver -> (w -> Bool) -> a -> Bool
+proxyVerify t UnsafeProxySignature{..} omegaPred m =
+    and [predCorrect, sigValid]
   where
-    ProxySecretKey{..} = psigPsk
+    UnsafeProxySecretKey{..} = psigPsk
     PublicKey issuerPk = pskIssuerPk
     PublicKey pdDelegatePkRaw = pskDelegatePk
     predCorrect = omegaPred pskOmega
-    pskValid = verifyPsk psigPsk
     sigValid =
         CC.verify
             pdDelegatePkRaw
