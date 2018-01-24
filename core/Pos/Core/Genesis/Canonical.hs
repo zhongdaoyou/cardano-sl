@@ -8,7 +8,6 @@ import           Universum
 
 import           Data.Fixed (Fixed (..))
 import qualified Data.HashMap.Strict as HM
-import qualified Data.Text as T
 import           Data.Time.Units (Millisecond, Second, convertUnit)
 import           Data.Typeable (typeRep)
 import           Formatting (formatToString)

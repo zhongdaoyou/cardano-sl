@@ -12,7 +12,7 @@ import           Formatting (sformat, (%))
 import           Serokell.Util (listJson)
 
 import           Pos.Core.Configuration (HasConfiguration)
-import           Pos.Core.Delegation.Types (DlgPayload (..), ProxySKHeavy)
+import           Pos.Core.Delegation.Types (DlgPayload (..))
 import           Pos.Crypto (ProxySecretKey (..), verifyPsk)
 
 -- | Verifier of 'DlgPayload' which ensures absence of duplicates, or invalid
