@@ -66,6 +66,7 @@ library
                      , pvss
                      , quickcheck-instances
                      , reflection
+                     , safe-exceptions
                      , scrypt
                      , serokell-util
                      , stm

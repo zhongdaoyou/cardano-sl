@@ -10,6 +10,8 @@ module Pos.Util.Util
        , logException
        , toAesonError
        , toCborError
+       , toTemplateHaskellError
+       , toParsecError
 
        -- * Ether
        , ether
@@ -80,6 +82,7 @@ import           Ether.Internal (HasLens (..))
 import qualified Formatting as F
 import qualified Language.Haskell.TH as TH
 import qualified Prelude
+import qualified Text.Megaparsec as P
 import           Serokell.Util (listJson)
 import           Serokell.Util.Exceptions ()
 import           System.Wlog (LoggerName, logError, usingLoggerName)
@@ -113,6 +116,8 @@ logException name = E.handleAsync (\e -> handler e >> E.throw e)
 -- | This unexported helper is used to define conversions to 'MonadFail'
 -- forced on us by external APIs. I also used underscores in its name, so don't
 -- you think about exporting it -- define a specialized helper instead.
+--
+-- This must be the only place in our codebase where we allow 'MonadFail'.
 external_api_fail :: MonadFail m => Either Text a -> m a
 external_api_fail = either (fail . toString) return
 
@@ -125,6 +130,16 @@ toAesonError = external_api_fail
 -- return monad is intentionally specialized because we avoid 'MonadFail'.
 toCborError :: Either Text a -> CBOR.Decoder s a
 toCborError = external_api_fail
+
+-- | Convert an 'Either'-encoded failure to a 'TH' Q-monad failure. The
+-- return monad is intentionally specialized because we avoid 'MonadFail'.
+toTemplateHaskellError :: Either Text a -> TH.Q a
+toTemplateHaskellError = external_api_fail
+
+-- | Convert an 'Either'-encoded failure to a 'megaparsec' failure. The
+-- return monad is intentionally specialized because we avoid 'MonadFail'.
+toParsecError :: P.Stream s => Either Text a -> P.ParsecT e s m a
+toParsecError = external_api_fail
 
 ----------------------------------------------------------------------------
 -- Ether

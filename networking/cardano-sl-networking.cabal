@@ -139,6 +139,7 @@ executable ping-pong
                      , cardano-sl-networking
                      , network-transport-tcp
                      , random
+                     , safe-exceptions
                      , time-units
 
   hs-source-dirs:      examples

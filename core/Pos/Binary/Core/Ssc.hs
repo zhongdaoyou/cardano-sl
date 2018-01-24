@@ -19,6 +19,7 @@ import           Pos.Core.Ssc.Types (Commitment (..), CommitmentsMap (..), Openi
 import           Pos.Core.Ssc.Vss (VssCertificate (..), VssCertificatesMap (..),
                                    mkVssCertificatesMap, recreateVssCertificate)
 import           Pos.Crypto (Hash, PublicKey)
+import           Pos.Util.Util (toCborError)
 
 instance Bi Commitment where
     encode Commitment{..} = encodeListLen 2 <> encode commShares
@@ -45,9 +46,7 @@ instance HasConfiguration => Bi VssCertificate where
         epo <- decode
         sig <- decode
         sky <- decode
-        case recreateVssCertificate key epo sig sky of
-            Left e  -> fail e
-            Right v -> pure v
+        toCborError $ recreateVssCertificate key epo sig sky
 
 instance HasConfiguration => Bi VssCertificatesMap where
     encode = encodeVssCertificates
@@ -86,7 +85,7 @@ decodeVssCertificates = do
     -- one cert will be present in resulting map and the attacker can set
     -- the other cert to be anything at all). 'mkVssCertificatesMap' checks
     -- that all certificates have distinct keys, so we can safely use it.
-    mkVssCertificatesMap certs
+    toCborError $ mkVssCertificatesMap certs
 
 encodeCommitments :: CommitmentsMap -> Encoding
 encodeCommitments = encode . HS.fromList . toList

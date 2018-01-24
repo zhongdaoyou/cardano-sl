@@ -37,6 +37,7 @@ import           Pos.Binary.Infra ()
 import           Pos.Binary.Ssc ()
 import           Pos.Core.Common (ScriptVersion)
 import           Pos.Data.Attributes (Attributes (..), decodeAttributes, encodeAttributes)
+import           Pos.Util.Util (toCborError)
 import qualified Test.Pos.Cbor.RefImpl as R
 import           Test.Pos.Helpers (binaryTest)
 import           Test.Pos.Util (withDefConfiguration)

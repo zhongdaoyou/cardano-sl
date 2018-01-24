@@ -52,7 +52,7 @@ instance Bi User where
                 lastName  <- decode
                 sex       <- decode
                 pure $ FullName {..}
-            _ -> fail ("Found invalid tag while getting User")
+            _ -> (toCborError . Left) ("Found invalid tag while getting User")
 -}
 
 module Pos.Binary.Class.TH
@@ -68,13 +68,17 @@ import qualified Codec.CBOR.Decoding as Cbor
 import qualified Codec.CBOR.Encoding as Cbor
 import           Control.Lens (imap)
 import           Data.List (nubBy)
-import qualified Data.Text as T
 import           Formatting (sformat, shown, (%))
 import           Language.Haskell.TH
 import           TH.ReifySimple (DataCon (..), DataType (..), reifyDataType)
 import           TH.Utilities (plainInstanceD)
 
 import qualified Pos.Binary.Class.Core as Bi
+
+-- | This function must match the one from 'Pos.Util.Util'. It is copied here
+-- to avoid a dependency and facilitate parallel builds.
+toTemplateHaskellError :: Either Text a -> Q a
+toTemplateHaskellError = either (fail . toString) return
 
 data Cons = Cons
     { -- | Name of a constructor.
@@ -95,9 +99,9 @@ data Field
 expToNameAndType :: ExpQ -> Q (Name, Type)
 expToNameAndType ex = ex >>= \case
     SigE (VarE n) t -> pure (n, t)
-    other           -> fail $ "expToNameAndType: the expression should look \
-                              \like [|fname :: FType|], but it doesn't: "
-                              <> show other
+    other           -> toTemplateHaskellError . Left $
+        "expToNameAndType: the expression should look \
+        \like [|fname :: FType|], but it doesn't: " <> show other
 
 fieldToPair :: Field -> Q (Name, Maybe Type)
 fieldToPair (Field ex)  = over _2 Just <$> expToNameAndType ex
@@ -122,44 +126,49 @@ deriveSimpleBiCxt = deriveSimpleBiInternal . Just
 deriveSimpleBiInternal :: Maybe TypeQ -> Name -> [Cons] -> Q [Dec]
 deriveSimpleBiInternal predsMB headTy constrs = do
     when (null constrs) $
-        failText "You passed no constructors to deriveSimpleBi"
+        toTemplateHaskellError . Left $
+        "You passed no constructors to deriveSimpleBi"
     when (length constrs > 255) $
-        failText "You passed too many constructors to deriveSimpleBi"
+        toTemplateHaskellError . Left $
+        "You passed too many constructors to deriveSimpleBi"
     when (length (nubBy ((==) `on` cName) constrs) /= length constrs) $
-        failText "You passed two constructors with the same name"
+        toTemplateHaskellError . Left $
+        "You passed two constructors with the same name"
     preds <- maybe (pure []) (fmap one) predsMB
     dt <- reifyDataType headTy
     case matchAllConstrs constrs (dtCons dt) of
         MissedCons cons ->
-            failText .
-                sformat ("Constructor '"%shown%"' isn't passed to deriveSimpleBi") $
-                cons
+            toTemplateHaskellError . Left .
+            sformat ("Constructor '"%shown%"' isn't passed to deriveSimpleBi") $
+            cons
         UnknownCons cons ->
-            failText .
-                sformat ("Unknown constructor '"%shown%"' is passed to deriveSimpleBi") $
-                cons
+            toTemplateHaskellError . Left .
+            sformat ("Unknown constructor '"%shown%"' is passed to deriveSimpleBi") $
+            cons
         MatchedCons matchedConstrs ->
             forM_ (zip constrs matchedConstrs) $ \(Cons{..}, DataCon{..}) -> do
                 let realFields = mapMaybe (\(n, t) -> (,t) <$> n) dcFields
                 when (length realFields /= length dcFields) $
-                    failText $ sformat ("Some field of "%shown
-                                       %" constructor doesn't have an explicit name") cName
+                    toTemplateHaskellError . Left $
+                    sformat ("Some field of "%shown
+                    %" constructor doesn't have an explicit name") cName
                 cResolvedFields <- mapM fieldToPair cFields
-                case checkAllFields cResolvedFields realFields of
-                    MissedField field ->
-                        failText $ sformat ("Field '"%shown%"' of the constructor '"
-                                            %shown%"' isn't passed to deriveSimpleBi")
-                                   field cName
-                    UnknownField field ->
-                        failText $ sformat ("Unknown field '"%shown%"' of the constructor '"
-                                            %shown%"' is passed to deriveSimpleBi")
-                                   field cName
-                    TypeMismatched field realType passedType ->
-                        failText $ sformat ("The type of '"%shown%"' of the constructor '"
-                                            %shown%"' is mismatched: real type '"
-                                            %shown%"', passed type '"%shown%"'")
-                                   field cName realType passedType
-                    MatchedFields -> pass
+                let fieldCheck = checkAllFields cResolvedFields realFields
+                toTemplateHaskellError $ case fieldCheck of
+                    MatchedFields -> Right ()
+                    MissedField field -> Left $
+                        sformat ("Field '"%shown%"' of the constructor '"
+                                %shown%"' isn't passed to deriveSimpleBi")
+                        field cName
+                    UnknownField field -> Left $
+                        sformat ("Unknown field '"%shown%"' of the constructor '"
+                                %shown%"' is passed to deriveSimpleBi")
+                        field cName
+                    TypeMismatched field realType passedType -> Left $
+                        sformat ("The type of '"%shown%"' of the constructor '"
+                                %shown%"' is mismatched: real type '"
+                                %shown%"', passed type '"%shown%"'")
+                        field cName realType passedType
     ty <- conT headTy
     makeBiInstanceTH preds ty <$> biEncodeExpr <*> biDecodeExpr
   where
@@ -174,10 +183,6 @@ deriveSimpleBiInternal predsMB headTy constrs = do
     -- Useful variables for @size@, @put@, @get@ --
     tagType :: TypeQ
     tagType = [t| Word8 |]
-
-    -- Helpers --
-    failText :: MonadFail m => T.Text -> m a
-    failText = fail . toString
 
     -- Decode definition --
     biEncodeExpr :: Q Exp
@@ -223,7 +228,8 @@ deriveSimpleBiInternal predsMB headTy constrs = do
     biDecodeExpr :: Q Exp
     biDecodeExpr = case constrs of
         []     ->
-            failText $ sformat ("Attempting to decode type without constructors "%shown) headTy
+            toTemplateHaskellError . Left $
+            sformat ("Attempting to decode type without constructors "%shown) headTy
         [cons] -> do
           doE [ bindS (varP actualLen)  [| Cbor.decodeListLenCanonical |]
               , noBindS (biDecodeConstr cons) -- There is one constructor
@@ -234,7 +240,7 @@ deriveSimpleBiInternal predsMB headTy constrs = do
                                               (normalB (biDecodeConstr con)) []
             let mismatchConstr =
                     match wildP (normalB
-                        [| fail $ toString ("Found invalid tag while decoding " <> shortNameTy) |]) []
+                        [| toCborError . Left $ "Found invalid tag while decoding " <> shortNameTy |]) []
             doE
                 [ bindS (varP actualLen)  [| Cbor.decodeListLenCanonical |]
                 , bindS (varP tagName)    [| Bi.decode |]

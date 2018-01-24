@@ -6,6 +6,7 @@ import           Pos.Binary.Class (Bi (..), Cons (..), Field (..), deriveSimpleB
 import           Pos.Core.Common.Types (Coin, mkCoin, unsafeGetCoin)
 import qualified Pos.Core.Common.Types as T
 import qualified Pos.Data.Attributes as A
+import           Pos.Util.Util (toCborError)
 import           Pos.Util.Orphans ()
 
 -- kind of boilerplate, but anyway that's what it was made for --
@@ -18,9 +19,7 @@ instance Bi (A.Attributes ()) where
 instance Bi T.CoinPortion where
     encode = encode . T.getCoinPortion
     decode =
-        T.mkCoinPortion <$> (decode @Word64) >>= \case
-            Left err          -> fail err
-            Right coinPortion -> return coinPortion
+        T.mkCoinPortion <$> (decode @Word64) >>= toCborError
 
 instance Bi T.BlockCount where
     encode = encode . T.getBlockCount

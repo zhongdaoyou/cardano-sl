@@ -21,12 +21,13 @@ import qualified Pos.Core.Update as U
 import           Pos.Core.Update.Types (BlockVersion, BlockVersionData (..), SoftforkRule (..),
                                         SoftwareVersion)
 import           Pos.Crypto (Hash, SignTag (SignUSVote), checkSig)
+import           Pos.Util.Util (toCborError)
 
 instance Bi U.ApplicationName where
     encode appName = encode (U.getApplicationName appName)
     decode = do
         appName <- decode
-        U.mkApplicationName appName
+        toCborError $ U.mkApplicationName appName
 
 deriveSimpleBi ''U.BlockVersion [
     Cons 'U.BlockVersion [
@@ -86,9 +87,7 @@ deriveSimpleBi ''U.BlockVersionModifier [
 
 instance Bi U.SystemTag where
     encode = encode . U.getSystemTag
-    decode = decode >>= \decoded -> case U.mkSystemTag decoded of
-        Left e   -> fail e
-        Right st -> pure st
+    decode = decode >>= toCborError . U.mkSystemTag
 
 deriveSimpleBi ''U.UpdateData [
     Cons 'U.UpdateData [
@@ -118,16 +117,14 @@ instance HasConfiguration => Bi U.UpdateProposal where
             <> encode (U.upSignature up)
     decode = do
         enforceSize "UpdateProposal" 7
-        up <- U.mkUpdateProposal <$> decode
-                                <*> decode
-                                <*> decode
-                                <*> decode
-                                <*> decode
-                                <*> decode
-                                <*> decode
-        case up of
-            Left e  -> fail e
-            Right p -> pure p
+        toCborError =<< (U.mkUpdateProposal
+            <$> decode
+            <*> decode
+            <*> decode
+            <*> decode
+            <*> decode
+            <*> decode
+            <*> decode)
 
 instance HasConfiguration => Bi U.UpdateVote where
     encode uv =  encodeListLen 4
@@ -142,8 +139,9 @@ instance HasConfiguration => Bi U.UpdateVote where
         d <- decode
         s <- decode
         let sigValid = checkSig SignUSVote k (p, d) s
-        unless sigValid $ fail "Pos.Binary.Update: UpdateVote: invalid signature"
-        pure $ U.UpdateVote k p d s
+        toCborError $ if sigValid
+            then Right $ U.UpdateVote k p d s
+            else Left "Pos.Binary.Update: UpdateVote: invalid signature"
 
 deriveSimpleBiCxt [t|HasConfiguration|] ''U.UpdatePayload [
     Cons 'U.UpdatePayload [

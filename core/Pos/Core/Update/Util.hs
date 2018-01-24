@@ -39,7 +39,7 @@ softforkRuleF :: Format r (SoftforkRule -> r)
 softforkRuleF = build
 
 mkUpdateProposal
-    :: (HasConfiguration, MonadFail m, Bi UpdateProposalToSign)
+    :: (HasConfiguration, Bi UpdateProposalToSign)
     => BlockVersion
     -> BlockVersionModifier
     -> SoftwareVersion
@@ -47,7 +47,7 @@ mkUpdateProposal
     -> UpAttributes
     -> PublicKey
     -> Signature UpdateProposalToSign
-    -> m UpdateProposal
+    -> Either Text UpdateProposal
 mkUpdateProposal
     upBlockVersion
     upBlockVersionMod
@@ -64,7 +64,7 @@ mkUpdateProposal
                     upData
                     upAttributes
         unless (checkSig SignUSProposal upFrom toSign upSignature) $
-            fail $ "UpdateProposal: signature is invalid"
+            Left "UpdateProposal: signature is invalid"
         pure UnsafeUpdateProposal{..}
 
 mkUpdateProposalWSign

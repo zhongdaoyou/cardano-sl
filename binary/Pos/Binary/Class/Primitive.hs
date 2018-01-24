@@ -14,7 +14,6 @@ module Pos.Binary.Class.Primitive
        -- * Binary serialization
        , AsBinary (..)
        , AsBinaryClass (..)
-       , fromBinaryM
        -- * Temporary functions
        , biSize
        -- * Backward-compatible functions
@@ -168,10 +167,6 @@ newtype AsBinary a = AsBinary
 class AsBinaryClass a where
     asBinary :: a -> AsBinary a
     fromBinary :: AsBinary a -> Either Text a
-
--- | Version of 'fromBinary' which works in any 'MonadFail'.
-fromBinaryM :: (AsBinaryClass a, MonadFail m) => AsBinary a -> m a
-fromBinaryM = either (fail . toString) return . fromBinary
 
 -- | Compute size of something serializable in bytes.
 biSize :: Bi a => a -> Byte
