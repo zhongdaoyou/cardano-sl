@@ -33,9 +33,8 @@ import           Control.Lens (makeLenses)
 import qualified Data.List.NonEmpty as NE
 import           Data.Time.Units (Microsecond)
 import           Formatting (int, sformat, shown, stext, (%))
-import           Mockable (CurrentTime, Delay, Mockable, Mockables, currentTime, delay,
-                           sleepForever)
-import           NTP.Client (NtpClientSettings (..), NtpMonad, ntpSingleShot, withNtpClient)
+import           Mockable (CurrentTime, Delay, Mockable, Mockables, currentTime, delay)
+import           NTP.Client (NtpClientSettings (..), NtpMonad, ntpSingleShot, spawnNtpClient)
 import           Serokell.Util (sec)
 import           System.Wlog (WithLogger, logDebug, logInfo, logWarning)
 
@@ -221,8 +220,7 @@ ntpWorkers = one . ntpSyncWorker
 ntpSyncWorker
     :: NtpWorkerMode m
     => NtpSlottingVar -> m ()
-ntpSyncWorker var =
-    withNtpClient (ntpSettings var) $ \_stopButton -> sleepForever
+ntpSyncWorker var = spawnNtpClient (ntpSettings var)
 
 ntpHandlerDo
     :: (MonadIO m, WithLogger m)

@@ -10,21 +10,17 @@
 module NTP.Example
     ( NtpClientSettings (..)
     , runNtpClientIO
-    , def
-    -- there is no stop button, since `runNtpClientIO` does `initLogging`
     ) where
 
 import           Universum
 
 import           Control.Monad (void)
-import           Data.Default (def)
 import           System.Wlog (LoggerNameBox, Severity (..), defaultConfig, setupLogging,
                               severityPlus, termSeveritiesOutB, usingLoggerName)
 
-import           Mockable.Concurrent (sleepForever)
 import           Mockable.Instances ()
 import           Mockable.Production (Production (..))
-import           NTP.Client (NtpClientSettings (..), withNtpClient)
+import           NTP.Client (NtpClientSettings (..), spawnNtpClient)
 
 type WorkMode = LoggerNameBox Production
 
@@ -34,4 +30,4 @@ runNtpClientIO settings = do
         defaultConfig "ntp-example" <> termSeveritiesOutB (severityPlus Debug)
     void $ runProduction $
         usingLoggerName "ntp-example" $
-        withNtpClient settings (const sleepForever)
+        spawnNtpClient settings
